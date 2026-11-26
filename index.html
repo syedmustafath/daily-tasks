@@ -252,7 +252,8 @@ body.statsview .pomo,body.statsview .tabs,body.statsview .cols,body.statsview .d
       <div class="calhead"><h2>Schedule</h2><div class="calbtns"><button id="prt" title="Print this day">🖨 Print</button><button class="warn" id="clrcal">↻ Clear</button><button class="evbtn" id="addev">+ Event</button></div></div>
       <div class="calscroll" id="calscroll"><div id="cal"></div></div>
       <div class="calfoot">
-        <button class="primary" id="complete">✓ Complete today</button>
+        <button id="gcal" title="Create or update this day's events in Google Calendar">📅 Push to Google Calendar</button>
+        <button class="primary" id="complete" style="margin-top:8px">✓ Complete today</button>
         <div class="cinfo" id="cinfo"></div>
       </div>
     </aside>
@@ -556,6 +557,72 @@ function completeDay(){
   m+=" Undo reverses it.";
   tab="tasks"; save(); render(); msg(m); window.scrollTo({top:0,behavior:"smooth"});
 }
+/* ---------- Google Calendar push (Google Identity Services token flow) ---------- */
+const GCLIENT=window.GOOGLE_CLIENT_ID||"", GSCOPE="https://www.googleapis.com/auth/calendar.events";
+const GAPI="https://www.googleapis.com/calendar/v3/calendars/primary/events";
+let gtok=null;
+function gisLoad(){
+  return new Promise((res,rej)=>{
+    if(window.google&&google.accounts&&google.accounts.oauth2)return res();
+    const old=document.getElementById("gis"); if(old){old.addEventListener("load",res);old.addEventListener("error",()=>rej(new Error("Couldn't load Google sign-in")));return}
+    const sc=document.createElement("script"); sc.id="gis"; sc.src="https://accounts.google.com/gsi/client"; sc.async=true;
+    sc.onload=res; sc.onerror=()=>rej(new Error("Couldn't load Google sign-in")); document.head.append(sc);
+  });
+}
+if(GCLIENT)gisLoad().catch(()=>{}); // preload so the sign-in popup opens straight from the click
+function gToken(){
+  if(gtok&&Date.now()<gtok.exp-60000)return Promise.resolve(gtok.t);
+  return gisLoad().then(()=>new Promise((res,rej)=>{
+    const c=google.accounts.oauth2.initTokenClient({client_id:GCLIENT,scope:GSCOPE,
+      callback:r=>{if(r.error)return rej(new Error(r.error_description||r.error));gtok={t:r.access_token,exp:Date.now()+(r.expires_in||3600)*1000};res(gtok.t)},
+      error_callback:e=>rej(new Error(e&&e.type==="popup_closed"?"sign-in cancelled":"sign-in failed"))});
+    c.requestAccessToken({prompt:""});
+  }));
+}
+async function gcal(tok,method,path,body){
+  const r=await fetch(GAPI+path,{method,headers:{Authorization:"Bearer "+tok,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  if(!r.ok){const e=new Error("Google Calendar "+r.status);e.status=r.status;throw e}
+  return r.status===204?null:r.json();
+}
+// Stable event id per task/event + day, so pushing again updates instead of duplicating.
+// Google ids allow a-v and 0-9 only: "vel" + date digits + hex of our own id.
+const gid=(day,id)=>"vel"+day.replace(/-/g,"")+[...id].map(c=>c.charCodeAt(0).toString(16)).join("");
+const GCOLOR={0:"11",1:"6",2:"9",3:"8",9:"8"};
+const gStore=()=>{try{return JSON.parse(localStorage.getItem("velocity.gcal")||"{}")}catch(e){return {}}};
+async function pushToGoogle(){
+  const btn=$("gcal");
+  if(!GCLIENT){msg("Google Calendar isn't set up yet. Add GOOGLE_CLIENT_ID to config.js (steps are in README.md).");return}
+  const day=state.cur, tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const items=[
+    ...state.tasks.filter(k=>k.start!=null).map(k=>({id:k.id,title:(k.done?"✓ ":"")+(k.p!=null?"P"+k.p+" · ":"")+k.text,start:k.start,dur:k.dur,color:GCOLOR[k.p==null?9:k.p],kind:"Task"})),
+    ...state.events.map(k=>({id:k.id,title:k.title,start:k.start,dur:k.dur,color:"5",kind:"Event"}))
+  ];
+  const store=gStore(), prev=store[day]||[], keep=new Set(items.map(i=>gid(day,i.id))), stale=prev.filter(g=>!keep.has(g));
+  if(!items.length&&!stale.length){msg("Nothing scheduled on "+dayLabel(day)+" to push.");return}
+  btn.disabled=true; btn.textContent="Connecting to Google…";
+  try{
+    const tok=await gToken(); btn.textContent="Pushing…";
+    let made=0, upd=0;
+    for(const it of items){
+      const s=parseKey(day); s.setMinutes(660+it.start); const e=new Date(s.getTime()+it.dur*60000);
+      const ev={summary:it.title,description:it.kind+" from Velocity",colorId:it.color,
+        start:{dateTime:s.toISOString(),timeZone:tz},end:{dateTime:e.toISOString(),timeZone:tz},
+        extendedProperties:{private:{velocity:"1"}}};
+      const id=gid(day,it.id);
+      try{await gcal(tok,"POST","",{...ev,id});made++}
+      catch(err){ if(err.status===409){await gcal(tok,"PUT","/"+id,{...ev,id,status:"confirmed"});upd++} else throw err }
+    }
+    let removed=0;
+    for(const g of stale){try{await gcal(tok,"DELETE","/"+g);removed++}catch(err){if(err.status!==404&&err.status!==410)throw err}}
+    store[day]=[...keep]; try{localStorage.setItem("velocity.gcal",JSON.stringify(store))}catch(e){}
+    msg("Google Calendar updated for "+dayLabel(day)+": "+made+" added, "+upd+" updated"+(removed?", "+removed+" removed":"")+".");
+  }catch(err){
+    if(err.status===401)gtok=null;
+    msg("Couldn't push to Google Calendar: "+err.message+(err.status===403?" (check the Calendar API is enabled and your account is a test user)":""));
+  }finally{btn.disabled=false; btn.textContent="📅 Push to Google Calendar"}
+}
+$("gcal").onclick=pushToGoogle;
+
 /* ---------- stats ---------- */
 let view="plan", srange=7;
 const DAYMS=864e5;
@@ -614,9 +681,9 @@ function renderStats(){
 $("statsbtn").onclick=()=>setView(view==="stats"?"plan":"stats");
 
 /* ---------- mobile tabs (Tasks / Calendar) ---------- */
-let tab="tasks"; try{tab=localStorage.getItem("velocity.tab")==="cal"?"cal":"tasks"}catch(e){}
+let tab="cal"; // phones always open on the calendar
 function setTab(t){
-  tab=t; try{localStorage.setItem("velocity.tab",t)}catch(e){}
+  tab=t;
   renderTabs();
   if(t==="cal")scrollToNow(); else window.scrollTo({top:0});
 }
