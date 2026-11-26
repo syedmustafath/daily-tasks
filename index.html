@@ -58,7 +58,17 @@ h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .pc.on,.pc.on:hover:not(:disabled){background:var(--acc);border-color:var(--acc)}
 .pcount{font-size:14px;color:var(--mute);font-variant-numeric:tabular-nums}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,400px);gap:20px;align-items:start}
-@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.tabs{display:none}
+@media(max-width:760px){
+  .cols{grid-template-columns:minmax(0,1fr)}
+  form{flex-wrap:nowrap}#np{flex:none;width:auto}
+  .tabs{display:flex;gap:6px;position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0;margin:0 0 10px;border-bottom:1px solid var(--line)}
+  .tabs button{flex:1;padding:10px 8px;font-weight:600;border-radius:999px;background:var(--card);color:var(--mute)}
+  .tabs button.on,.tabs button.on:hover:not(:disabled){background:var(--acc);border-color:var(--acc);color:var(--onacc)}
+  .tabs small{font-weight:500;opacity:.8;margin-left:4px}
+  .cols[data-tab=tasks] .cal{display:none}
+  .cols[data-tab=cal] section{display:none}
+}
 form{display:flex;gap:8px;margin-bottom:14px}
 input[type=text],select{padding:10px 12px;font-size:16px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 input[type=text]:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
@@ -148,6 +158,7 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
 .tag.t{color:var(--acc);background:var(--accbg)}.tag.e{color:var(--ev);background:var(--evbg)}
 #pt{display:none}
 @media print{
+  .tabs{display:none!important}.cols .cal{display:block!important}
   html[data-theme]{color-scheme:light;--bg:#fff;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--line2:#cbd5e1;--acc:#2563eb;--accbg:#eaf1ff;--ev:#d97706;--evbg:#fff4de;--soft:#f8fafc;--pb0:#fee2e2;--pe0:#dc2626;--pb1:#ffedd5;--pe1:#ea580c;--pb2:#dbeafe;--pe2:#2563eb;--pb3:#e2e8f0;--pe3:#64748b;--pb9:#f1f5f9;--pe9:#94a3b8}
   .themes{display:none}
   @page{margin:12mm}
@@ -179,7 +190,8 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
   </header>
   <div class="bar"><i id="bar"></i></div>
   <div class="pomo"><h2>Pomodoros</h2><button class="pplay" id="pplay">▶ Start</button><button id="ppause" class="ppause" hidden>⏸ Pause</button><div id="pomo"></div><span class="pcount" id="pcount"></span></div>
-  <div class="cols">
+  <nav class="tabs" role="tablist"><button role="tab" data-tab="tasks" id="tabT"></button><button role="tab" data-tab="cal" id="tabC"></button></nav>
+  <div class="cols" id="cols" data-tab="tasks">
     <section>
       <form id="f">
         <input type="text" id="t" placeholder="Add a task" maxlength="200" autocomplete="off">
@@ -472,8 +484,21 @@ function completeDay(){
   if(left>0)m+=" "+left+" couldn't move because "+dayLabel(nk)+" is full (15 max) and stayed on "+dayLabel(from)+".";
   if(repLeft>0)m+=" "+repLeft+" repeating task"+(repLeft>1?"s":"")+" couldn't be added (day full).";
   m+=" Undo reverses it.";
-  save(); render(); msg(m); window.scrollTo({top:0,behavior:"smooth"});
+  tab="tasks"; save(); render(); msg(m); window.scrollTo({top:0,behavior:"smooth"});
 }
+/* ---------- mobile tabs (Tasks / Calendar) ---------- */
+let tab="tasks"; try{tab=localStorage.getItem("velocity.tab")==="cal"?"cal":"tasks"}catch(e){}
+function setTab(t){
+  tab=t; try{localStorage.setItem("velocity.tab",t)}catch(e){}
+  renderTabs(); window.scrollTo({top:0});
+}
+function renderTabs(){
+  const open=state.tasks.filter(k=>k.start==null).length, sch=state.tasks.length-open+state.events.length;
+  $("cols").dataset.tab=tab;
+  $("tabT").innerHTML="Tasks<small>"+open+"</small>"; $("tabC").innerHTML="Calendar<small>"+sch+"</small>";
+  [["tabT","tasks"],["tabC","cal"]].forEach(([id,t])=>{const b=$(id);b.classList.toggle("on",tab===t);b.setAttribute("aria-selected",tab===t)});
+}
+$("tabT").onclick=()=>setTab("tasks"); $("tabC").onclick=()=>setTab("cal");
 function render(){
   const t=state.tasks, list=$("list");
   $("n").textContent=t.length;
@@ -492,6 +517,7 @@ function render(){
   else if(!open.length) list.innerHTML='<div class="empty">Everything is scheduled on the calendar.</div>';
   open.forEach(k=>list.append(card(k)));
   renderCal();
+  renderTabs();
 }
 
 /* ---------- drag (mouse + touch) ---------- */
