@@ -59,6 +59,10 @@ h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .pcount{font-size:14px;color:var(--mute);font-variant-numeric:tabular-nums}
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,400px);gap:20px;align-items:start}
 .tabs{display:none}
+@media(min-width:761px){ /* desktop: calendar stays in view and scrolls on its own */
+  .cal{position:sticky;top:12px;display:flex;flex-direction:column;max-height:max(380px,calc(100vh - 260px))}
+  .calscroll{overflow-y:auto;flex:1;min-height:0}
+}
 @media(max-width:760px){
   .cols{grid-template-columns:minmax(0,1fr)}
   form{flex-wrap:nowrap}#np{flex:none;width:auto}
@@ -161,6 +165,7 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
 .tag.t{color:var(--acc);background:var(--accbg)}.tag.e{color:var(--ev);background:var(--evbg)}
 #pt{display:none}
 @media print{
+  .cal{position:static!important;max-height:none!important;display:block!important}.calscroll{overflow:visible!important}
   #stats,.sbtn{display:none!important}
   .tabs{display:none!important}.cols .cal{display:block!important}
   html[data-theme]{color-scheme:light;--bg:#fff;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--line2:#cbd5e1;--acc:#2563eb;--accbg:#eaf1ff;--ev:#d97706;--evbg:#fff4de;--soft:#f8fafc;--pb0:#fee2e2;--pe0:#dc2626;--pb1:#ffedd5;--pe1:#ea580c;--pb2:#dbeafe;--pe2:#2563eb;--pb3:#e2e8f0;--pe3:#64748b;--pb9:#f1f5f9;--pe9:#94a3b8}
@@ -245,7 +250,7 @@ body.statsview .pomo,body.statsview .tabs,body.statsview .cols,body.statsview .d
     </section>
     <aside class="cal">
       <div class="calhead"><h2>Schedule</h2><div class="calbtns"><button id="prt" title="Print this day">🖨 Print</button><button class="warn" id="clrcal">↻ Clear</button><button class="evbtn" id="addev">+ Event</button></div></div>
-      <div id="cal"></div>
+      <div class="calscroll" id="calscroll"><div id="cal"></div></div>
       <div class="calfoot">
         <button class="primary" id="complete">✓ Complete today</button>
         <div class="cinfo" id="cinfo"></div>
@@ -408,16 +413,22 @@ function placeNow(){
   const d=new Date(); el.firstChild.textContent=pad(d.getHours())+":"+pad(d.getMinutes());
 }
 function scrollToNow(){
-  if(!isMobile()||view!=="plan"||tab!=="cal")return;
+  if(view!=="plan"||(isMobile()&&tab!=="cal"))return;
   requestAnimationFrame(()=>{
     placeNow();
-    const el=$("nowl"), target=el||$("cal");
-    const y=target.getBoundingClientRect().top+scrollY-(el?innerHeight*0.35:70);
-    scrollTo({top:Math.max(0,y),behavior:"smooth"});
+    const el=$("nowl");
+    if(isMobile()){ // phone: the page itself scrolls
+      const target=el||$("cal"), y=target.getBoundingClientRect().top+scrollY-(el?innerHeight*0.35:70);
+      scrollTo({top:Math.max(0,y),behavior:"smooth"});
+    }else{ // desktop: the calendar panel scrolls, the task list stays put
+      const sc=$("calscroll"), y=el?el.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop-sc.clientHeight*0.35:0;
+      sc.scrollTo({top:Math.max(0,y),behavior:"smooth"});
+    }
   });
 }
 setInterval(placeNow,20000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){placeNow();scrollToNow()}});
+addEventListener("focus",()=>{placeNow();scrollToNow()}); // switching back to this window
 function renderPomo(){
   const box=$("pomo"); box.innerHTML="";
   ["Before lunch","After lunch"].forEach((name,gi)=>{
@@ -679,7 +690,10 @@ function startDrag(e,k,kind,srcEl){
     }
     ghost.style.left=(ev.clientX-20)+"px"; ghost.style.top=(ev.clientY-20)+"px";
     indicate(where(ev.clientX,ev.clientY),ev.clientY,ev.clientX);
-    if(ev.clientY<60)window.scrollBy(0,-12); else if(ev.clientY>innerHeight-60)window.scrollBy(0,12);
+    const sc=$("calscroll"), r=sc.getBoundingClientRect();
+    if(!isMobile()&&sc.scrollHeight>sc.clientHeight&&ev.clientX>=r.left&&ev.clientX<=r.right&&(ev.clientY<r.top+40||ev.clientY>r.bottom-40)){
+      sc.scrollBy(0,ev.clientY<r.top+40?-12:12);
+    }else if(ev.clientY<60)window.scrollBy(0,-12); else if(ev.clientY>innerHeight-60)window.scrollBy(0,12);
   }
   function up(ev){
     grip.removeEventListener("pointermove",move); grip.removeEventListener("pointerup",up); grip.removeEventListener("pointercancel",up);
