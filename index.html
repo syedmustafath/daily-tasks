@@ -140,6 +140,7 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
         <button id="refresh" class="warn">↻ Refresh list</button>
       </div>
       <div class="msg" id="msg"></div>
+      <div class="msg" id="sync"></div>
     </section>
     <aside class="cal">
       <div class="calhead"><h2>Schedule</h2><div class="calbtns"><button class="warn" id="clrcal">↻ Clear</button><button class="evbtn" id="addev">+ Event</button></div></div>
@@ -152,6 +153,7 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
   </div>
 </div>
 <div id="modal"><div class="dlg" id="dlg"></div></div>
+<script src="config.js"></script>
 <script>
 const MAX=15, KEY="today15.v4", PPM=2, TOTAL=420, DEF=15; // minutes after 11:00; 2px per minute
 const POMOS=8;
@@ -182,8 +184,36 @@ function serialize(){
 function fmt(min){const m=660+min;return pad(Math.floor(m/60))+":"+pad(m%60)}
 function rng(a){return fmt(a.start)+"–"+fmt(a.start+a.dur)}
 
+/* ---------- Supabase sync (optional; localStorage stays as the offline copy) ---------- */
+const SB_URL=(window.SUPABASE_URL||"").replace(/\/$/,""), SB_KEY=window.SUPABASE_ANON_KEY||"", ROW="main";
+const SB_ON=!!(SB_URL&&SB_KEY);
+const sbHead=()=>({apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,"Content-Type":"application/json"});
+let sbTimer=null, sbReady=!SB_ON;
+function sbPush(){
+  if(!SB_ON||!sbReady)return;
+  clearTimeout(sbTimer);
+  sbTimer=setTimeout(()=>{
+    fetch(SB_URL+"/rest/v1/today15?on_conflict=id",{method:"POST",headers:{...sbHead(),Prefer:"resolution=merge-duplicates,return=minimal"},
+      body:JSON.stringify({id:ROW,data:serialize(),updated_at:new Date().toISOString()})})
+      .then(r=>{if(!r.ok)throw new Error(r.status)}).catch(()=>{$("sync").textContent="⚠ sync failed"});
+    $("sync").textContent="☁ synced";
+  },600);
+}
+async function sbLoad(){
+  if(!SB_ON)return;
+  try{
+    $("sync").textContent="☁ loading…";
+    const r=await fetch(SB_URL+"/rest/v1/today15?id=eq."+ROW+"&select=data",{headers:sbHead()});
+    if(!r.ok)throw new Error(r.status);
+    const rows=await r.json();
+    if(rows.length&&rows[0].data){load(JSON.stringify(rows[0].data));try{localStorage.setItem(KEY,JSON.stringify(serialize()))}catch(e){}render()}
+    sbReady=true; $("sync").textContent="☁ synced";
+    if(!rows.length)sbPush(); // first run: upload what's in localStorage
+  }catch(e){$("sync").textContent="⚠ offline (local only)"}
+}
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(serialize()))}catch(e){}
+  sbPush();
 }
 function msg(s){$("msg").textContent=s}
 
@@ -550,6 +580,7 @@ function load(raw){
 }
 try{const r=localStorage.getItem(KEY)||localStorage.getItem("today15.v3")||localStorage.getItem("today15.v2")||localStorage.getItem("today15.v1"); if(r)load(r)}catch(e){}
 render();
+sbLoad();
 </script>
 </body>
 </html>
