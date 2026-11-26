@@ -126,6 +126,24 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
 .dlg .row button{flex:1}
 .tag{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px}
 .tag.t{color:var(--acc);background:var(--accbg)}.tag.e{color:var(--ev);background:var(--evbg)}
+#pt{display:none}
+@media print{
+  @page{margin:12mm}
+  body{background:#fff}
+  .wrap{max-width:none;padding:0}
+  .bar,.pomo,.count,.datenav button,.calhead,.calfoot,section,#modal,.msg{display:none!important}
+  header{margin-bottom:8px}
+  .cols{display:block}
+  .cal{box-shadow:none;border:1px solid #94a3b8;border-radius:0;max-width:none;break-inside:avoid}
+  .blk,.line,.task,.tag{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .blk{border-radius:3px}.blk .grip{display:none}
+  #pt{display:block;margin-top:14px;break-inside:avoid}
+  #pt h2{margin-bottom:6px;color:#000}
+  #pt ul{margin:0;padding:0;list-style:none;columns:2}
+  #pt li{padding:3px 0;border-bottom:1px solid #e2e8f0;break-inside:avoid;font-size:13px}
+  #pt li:before{content:"☐ "}
+  #pt li.d{color:#64748b;text-decoration:line-through}
+}
 </style>
 </head>
 <body>
@@ -153,7 +171,7 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
       <div class="msg" id="sync"></div>
     </section>
     <aside class="cal">
-      <div class="calhead"><h2>Schedule</h2><div class="calbtns"><button class="warn" id="clrcal">↻ Clear</button><button class="evbtn" id="addev">+ Event</button></div></div>
+      <div class="calhead"><h2>Schedule</h2><div class="calbtns"><button id="prt" title="Print this day">🖨 Print</button><button class="warn" id="clrcal">↻ Clear</button><button class="evbtn" id="addev">+ Event</button></div></div>
       <div id="cal"></div>
       <div class="calfoot">
         <button class="primary" id="complete">✓ Complete today</button>
@@ -162,6 +180,7 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
     </aside>
   </div>
 </div>
+<div id="pt"></div>
 <div id="modal"><div class="dlg" id="dlg"></div></div>
 <script src="config.js"></script>
 <script>
@@ -584,6 +603,18 @@ $("undo").onclick=()=>{
   msg("Restored."); save(); render();
 };
 $("complete").onclick=completeDay;
+$("prt").onclick=()=>window.print();
+// Fill the print-only list of tasks that aren't on the calendar yet
+function fillPrint(){
+  const rest=state.tasks.filter(k=>k.start==null);
+  const pt=$("pt"); pt.innerHTML="";
+  if(!rest.length)return;
+  const h=document.createElement("h2"); h.textContent="Unscheduled tasks"; pt.append(h);
+  const ul=document.createElement("ul");
+  rest.forEach(k=>{const li=document.createElement("li"); if(k.done)li.className="d"; li.textContent=(k.p!=null?"P"+k.p+" · ":"")+k.text; ul.append(li)});
+  pt.append(ul);
+}
+addEventListener("beforeprint",fillPrint);
 
 /* ---------- load ---------- */
 const clampStart=n=>Number.isFinite(n)?Math.max(0,Math.min(TOTAL-15,Math.round(n/15)*15)):null;
