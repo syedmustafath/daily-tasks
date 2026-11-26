@@ -49,6 +49,8 @@ h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .pcs{display:flex;gap:8px}
 .pplay{background:var(--acc);border-color:var(--acc);color:var(--onacc);font-weight:600;padding:8px 14px;border-radius:999px;font-variant-numeric:tabular-nums;min-width:110px}
 .pplay:hover:not(:disabled){background:var(--acch);border-color:var(--acch)}
+.ppause{padding:8px 12px;border-radius:999px;font-weight:600}
+.ppause[hidden]{display:none}
 .pplay.run{background:var(--card);color:var(--acc)}
 .pplay.run:hover:not(:disabled){background:var(--accbg)}
 .pc{width:34px;height:34px;border-radius:50%;border:2px solid var(--line2);background:var(--card);padding:0;display:flex;align-items:center;justify-content:center;color:var(--onacc);font-size:16px;line-height:1}
@@ -173,7 +175,7 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
     </div>
   </header>
   <div class="bar"><i id="bar"></i></div>
-  <div class="pomo"><h2>Pomodoros</h2><button class="pplay" id="pplay">▶ Start</button><div id="pomo"></div><span class="pcount" id="pcount"></span></div>
+  <div class="pomo"><h2>Pomodoros</h2><button class="pplay" id="pplay">▶ Start</button><button id="ppause" class="ppause" hidden>⏸ Pause</button><div id="pomo"></div><span class="pcount" id="pcount"></span></div>
   <div class="cols">
     <section>
       <form id="f">
@@ -375,13 +377,16 @@ function beep(){
   }catch(e){}
 }
 function renderTimer(){
-  const b=$("pplay"); if(!b)return;
+  const b=$("pplay"), pb=$("ppause"); if(!b)return;
   if(state.ptimer){
-    const left=Math.max(0,state.ptimer.end-Date.now()), s=Math.ceil(left/1000);
+    const paused=!!state.ptimer.paused;
+    const left=paused?state.ptimer.left:Math.max(0,state.ptimer.end-Date.now()), s=Math.ceil(left/1000);
     const txt=pad(Math.floor(s/60))+":"+pad(s%60);
-    b.className="pplay run"; b.textContent="■ "+txt; b.title="Stop timer";
-    document.title="⏱ "+txt+" · Velocity";
+    b.className="pplay run"; b.textContent=(paused?"⏸ ":"■ ")+txt; b.title="Stop timer";
+    document.title=(paused?"⏸ ":"⏱ ")+txt+" · Velocity";
+    pb.hidden=false; pb.textContent=paused?"▶ Resume":"⏸ Pause";
   }else{
+    pb.hidden=true;
     b.className="pplay"; b.textContent="▶ Start"; b.title="Start a 25-minute pomodoro";
     document.title="Velocity";
   }
@@ -394,7 +399,7 @@ function finishTimer(){
   msg(i>=0?"Pomodoro complete. Logged to circle "+(i+1)+".":"Pomodoro complete. All 8 circles are already filled.");
 }
 function tick(){
-  if(!state.ptimer)return;
+  if(!state.ptimer||state.ptimer.paused)return;
   if(Date.now()>=state.ptimer.end)finishTimer(); else renderTimer();
 }
 setInterval(tick,500);
@@ -402,6 +407,12 @@ $("pplay").onclick=()=>{
   if(state.ptimer){state.ptimer=null;save();renderTimer();msg("Timer stopped. Nothing logged.");return}
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();if(actx.state==="suspended")actx.resume()}catch(e){}
   state.ptimer={end:Date.now()+POMO_MS}; msg("Pomodoro started. 25 minutes."); save(); renderTimer();
+};
+$("ppause").onclick=()=>{
+  const t=state.ptimer; if(!t)return;
+  if(t.paused){state.ptimer={end:Date.now()+t.left};msg("Pomodoro resumed.")}
+  else{state.ptimer={paused:true,left:Math.max(0,t.end-Date.now())};msg("Pomodoro paused. Tap Resume to continue.")}
+  save(); renderTimer();
 };
 function renderDate(){
   const box=$("date"); box.innerHTML="";
@@ -679,7 +690,7 @@ function load(raw){
       srt(days); if(undo)srt(undo.days);
     }
     state.days=days; state.cur=cur; state.undo=undo;
-    state.ptimer=s.ptimer&&Number.isFinite(s.ptimer.end)?{end:s.ptimer.end}:null;
+    state.ptimer=s.ptimer&&s.ptimer.paused&&Number.isFinite(s.ptimer.left)?{paused:true,left:Math.max(0,Math.min(POMO_MS,s.ptimer.left))}:(s.ptimer&&Number.isFinite(s.ptimer.end)?{end:s.ptimer.end}:null);
   }catch(e){}
 }
 try{const r=localStorage.getItem(KEY)||localStorage.getItem("today15.v3")||localStorage.getItem("today15.v2")||localStorage.getItem("today15.v1"); if(r)load(r)}catch(e){}
