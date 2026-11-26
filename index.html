@@ -3,7 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Today's 15</title>
+<title>Velocity</title>
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Velocity">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -121,7 +129,7 @@ select.pri[data-p="3"]{color:#475569;background:#e2e8f0}
 <body>
 <div class="wrap">
   <header>
-    <div><h1>Today's 15</h1><div class="datenav" id="date"></div></div>
+    <div><h1>Velocity</h1><div class="datenav" id="date"></div></div>
     <div class="count"><span id="n">0</span><small> / 15</small></div>
   </header>
   <div class="bar"><i id="bar"></i></div>
@@ -320,10 +328,10 @@ function renderTimer(){
     const left=Math.max(0,state.ptimer.end-Date.now()), s=Math.ceil(left/1000);
     const txt=pad(Math.floor(s/60))+":"+pad(s%60);
     b.className="pplay run"; b.textContent="■ "+txt; b.title="Stop timer";
-    document.title="⏱ "+txt+" · Today's 15";
+    document.title="⏱ "+txt+" · Velocity";
   }else{
     b.className="pplay"; b.textContent="▶ Start"; b.title="Start a 25-minute pomodoro";
-    document.title="Today's 15";
+    document.title="Velocity";
   }
 }
 function finishTimer(){
@@ -581,6 +589,7 @@ function load(raw){
 try{const r=localStorage.getItem(KEY)||localStorage.getItem("today15.v3")||localStorage.getItem("today15.v2")||localStorage.getItem("today15.v1"); if(r)load(r)}catch(e){}
 render();
 sbLoad();
+if("serviceWorker"in navigator&&location.protocol!=="file:")addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 </script>
 </body>
 </html>
