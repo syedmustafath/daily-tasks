@@ -158,6 +158,7 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
 .tag.t{color:var(--acc);background:var(--accbg)}.tag.e{color:var(--ev);background:var(--evbg)}
 #pt{display:none}
 @media print{
+  #stats,.sbtn{display:none!important}
   .tabs{display:none!important}.cols .cal{display:block!important}
   html[data-theme]{color-scheme:light;--bg:#fff;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--line2:#cbd5e1;--acc:#2563eb;--accbg:#eaf1ff;--ev:#d97706;--evbg:#fff4de;--soft:#f8fafc;--pb0:#fee2e2;--pe0:#dc2626;--pb1:#ffedd5;--pe1:#ea580c;--pb2:#dbeafe;--pe2:#2563eb;--pb3:#e2e8f0;--pe3:#64748b;--pb9:#f1f5f9;--pe9:#94a3b8}
   .themes{display:none}
@@ -177,6 +178,36 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
   #pt li:before{content:"☐ "}
   #pt li.d{color:#64748b;text-decoration:line-through}
 }
+.sbtn{padding:3px 10px;font-size:13px;font-weight:600;border-radius:999px}
+#stats{display:none}
+body.statsview #stats{display:block}
+body.statsview .pomo,body.statsview .tabs,body.statsview .cols,body.statsview .datenav{display:none}
+.srange{display:flex;gap:6px;margin:0 0 14px}
+.srange button{padding:7px 14px;border-radius:999px;font-weight:600;color:var(--mute)}
+.srange button.on,.srange button.on:hover:not(:disabled){background:var(--acc);border-color:var(--acc);color:var(--onacc)}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.scard,.spanel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:14px}
+.scard span{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)}
+.scard b{display:block;font-size:30px;font-weight:700;color:var(--acc);letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:2px 0}
+.scard small{color:var(--mute);font-size:12.5px}
+.sgroups{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.spanel h2{margin-bottom:12px}
+.chart{display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--line2)}
+.chart .col{flex:1;position:relative;height:100%;min-width:0}
+.chart .tot,.chart .dn{position:absolute;left:0;right:0;bottom:0;border-radius:3px 3px 0 0}
+.chart .tot{background:var(--track)}.chart .dn{background:var(--acc)}
+.chart .col.we .tot{background:var(--soft)}
+.clab{display:flex;gap:3px;margin-top:4px;font-size:11px;color:var(--mute)}
+.clab span{flex:1;text-align:center;min-width:0;overflow:hidden}
+.clab.sp{justify-content:space-between}.clab.sp span{flex:none}
+.legend{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--mute)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.prow{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+.prow .pl{width:70px;flex:none}
+.prow .pt{flex:1;height:10px;background:var(--track);border-radius:5px;overflow:hidden}
+.prow .pt i{display:block;height:100%;background:var(--acc);border-radius:5px}
+.prow .pv{width:84px;text-align:right;color:var(--mute);font-variant-numeric:tabular-nums}
+.snote{margin-top:14px;font-size:12.5px;color:var(--mute)}
 </style>
 </head>
 <body>
@@ -184,12 +215,14 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
   <header>
     <div><h1><img class="logo" src="icons/icon-192.png" srcset="icons/icon-192.png 1x, icons/icon-512.png 3x" alt="Velocity" width="52" height="52"></h1><div class="datenav" id="date"></div></div>
     <div class="hr">
-      <div class="themes" role="group" aria-label="Theme"><button data-t="light" title="Light" aria-label="Light theme"></button><button data-t="dark" title="Dark" aria-label="Dark theme"></button><button data-t="mono" title="Mono" aria-label="Mono theme"></button></div>
+      <div style="display:flex;align-items:center;gap:12px"><button class="sbtn" id="statsbtn">📊 Stats</button>
+      <div class="themes" role="group" aria-label="Theme"><button data-t="light" title="Light" aria-label="Light theme"></button><button data-t="dark" title="Dark" aria-label="Dark theme"></button><button data-t="mono" title="Mono" aria-label="Mono theme"></button></div></div>
       <div class="count"><span id="n">0</span><small> / 15</small></div>
     </div>
   </header>
   <div class="bar"><i id="bar"></i></div>
   <div class="pomo"><h2>Pomodoros</h2><button class="pplay" id="pplay">▶ Start</button><button id="ppause" class="ppause" hidden>⏸ Pause</button><div id="pomo"></div><span class="pcount" id="pcount"></span></div>
+  <div id="stats"></div>
   <nav class="tabs" role="tablist"><button role="tab" data-tab="tasks" id="tabT"></button><button role="tab" data-tab="cal" id="tabC"></button></nav>
   <div class="cols" id="cols" data-tab="tasks">
     <section>
@@ -486,6 +519,63 @@ function completeDay(){
   m+=" Undo reverses it.";
   tab="tasks"; save(); render(); msg(m); window.scrollTo({top:0,behavior:"smooth"});
 }
+/* ---------- stats ---------- */
+let view="plan", srange=7;
+const DAYMS=864e5;
+function setView(v){
+  view=v; document.body.classList.toggle("statsview",v==="stats");
+  $("statsbtn").textContent=v==="stats"?"← Planner":"📊 Stats";
+  if(v==="stats")renderStats(); window.scrollTo({top:0});
+}
+function computeStats(){
+  const today=keyOf(new Date());
+  const lastN=n=>Array.from({length:n},(_,i)=>addDays(today,i-(n-1)));
+  const keys=Object.keys(state.days).filter(k=>k<=today).sort();
+  const from=srange===0?(keys[0]||today):addDays(today,-(srange-1));
+  const rk=keys.filter(k=>k>=from);
+  const all=[]; let pomos=0, active=0;
+  rk.forEach(k=>{const d=state.days[k]; if(d.tasks.length||d.pomo.some(Boolean))active++; pomos+=d.pomo.filter(Boolean).length; d.tasks.forEach(t=>all.push(t))});
+  const done=all.filter(t=>t.done).length, carried=all.filter(t=>t.c>0).length, sched=all.filter(t=>t.start!=null).length;
+  // streak: consecutive days with a finished task or pomodoro; Fri/Sat with nothing planned don't break it, today isn't over yet
+  let streak=0;
+  for(let i=0,k=today;i<400;i++,k=addDays(k,-1)){
+    const d=state.days[k], hit=d&&(d.tasks.some(t=>t.done)||d.pomo.some(Boolean));
+    if(hit)streak++;
+    else if(k===today||(isWeekend(k)&&!(d&&d.tasks.length)))continue;
+    else break;
+  }
+  const byP=[0,1,2,3,null].map(p=>{const g=all.filter(t=>(t.p==null?null:t.p)===p);return {p,total:g.length,done:g.filter(t=>t.done).length}});
+  const n=srange===7?7:30, days=lastN(n).map(k=>{const d=state.days[k];return {k,total:d?d.tasks.length:0,done:d?d.tasks.filter(t=>t.done).length:0,pomo:d?d.pomo.filter(Boolean).length:0}});
+  return {all,done,pomos,active,carried,sched,streak,byP,days,from,today};
+}
+function renderStats(){
+  const S=computeStats(), box=$("stats"), tot=S.all.length;
+  const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
+  const mins=S.pomos*25, focus=mins>=60?Math.floor(mins/60)+"h "+(mins%60)+"m":mins+"m";
+  const card=(l,v,sub)=>`<div class="scard"><span>${l}</span><b>${v}</b><small>${sub}</small></div>`;
+  const rng=[[7,"7 days"],[30,"30 days"],[0,"All time"]].map(([n,l])=>`<button data-r="${n}" class="${srange===n?"on":""}">${l}</button>`).join("");
+  let h=`<div class="srange">${rng}</div>`;
+  if(!tot&&!S.pomos){box.innerHTML=h+'<div class="empty">No data in this period yet. Plan a day and complete some tasks.</div>';bind();return}
+  h+='<div class="sgrid">'+
+    card("Completion",pct(S.done,tot),S.done+" of "+tot+" tasks done")+
+    card("Pomodoros",S.pomos,focus+" focused · "+(S.active?(S.pomos/S.active).toFixed(1):"0")+" per active day")+
+    card("Streak",S.streak+(S.streak===1?" day":" days"),"days with a task or pomodoro done")+
+    card("Carried over",pct(S.carried,tot),S.carried+" tasks slipped at least a day")+
+    card("Scheduled",pct(S.sched,tot),"tasks given a calendar slot")+
+    '</div>';
+  const col=(d,max,key,cls)=>`<div class="col${isWeekend(d.k)?" we":""}" title="${dayLabel(d.k)}: ${cls}"><div class="tot" style="height:${Math.min(100,(key==="pomo"?0:d.total)/max*100)}%"></div><div class="dn" style="height:${Math.min(100,d[key==="pomo"?"pomo":"done"]/max*100)}%"></div></div>`;
+  const labs=S.days.length<=7?`<div class="clab">${S.days.map(d=>`<span>${parseKey(d.k).toLocaleDateString(undefined,{weekday:"short"}).slice(0,3)}</span>`).join("")}</div>`
+    :`<div class="clab sp"><span>${dayLabel(S.days[0].k)}</span><span>${dayLabel(S.days[S.days.length-1].k)}</span></div>`;
+  h+='<div class="sgroups">'+
+   `<div class="spanel"><h2>Tasks per day</h2><div class="chart">${S.days.map(d=>col({...d,pomo:0},15,"done",d.done+" of "+d.total+" done")).join("")}</div>${labs}<div class="legend"><span><i style="background:var(--acc)"></i>done</span><span><i style="background:var(--track)"></i>planned</span></div></div>`+
+   `<div class="spanel"><h2>Pomodoros per day</h2><div class="chart">${S.days.map(d=>col(d,8,"pomo",d.pomo+" pomodoros")).join("")}</div>${labs}<div class="legend"><span><i style="background:var(--acc)"></i>completed (max 8)</span></div></div>`+
+   `<div class="spanel"><h2>By priority</h2>${S.byP.map(r=>`<div class="prow"><div class="pl">${r.p==null?"No priority":"P"+r.p}</div><div class="pt"><i style="width:${r.total?r.done/r.total*100:0}%"></i></div><div class="pv">${r.done}/${r.total} · ${pct(r.done,r.total)}</div></div>`).join("")}</div>`+
+   '</div><div class="snote">Stats are calculated from the days saved in this app. Unfinished tasks move forward when you press “Complete today”, so they count on the day they finally sit on.</div>';
+  box.innerHTML=h; bind();
+  function bind(){box.querySelectorAll(".srange button").forEach(b=>b.onclick=()=>{srange=+b.dataset.r;renderStats()})}
+}
+$("statsbtn").onclick=()=>setView(view==="stats"?"plan":"stats");
+
 /* ---------- mobile tabs (Tasks / Calendar) ---------- */
 let tab="tasks"; try{tab=localStorage.getItem("velocity.tab")==="cal"?"cal":"tasks"}catch(e){}
 function setTab(t){
@@ -518,6 +608,7 @@ function render(){
   open.forEach(k=>list.append(card(k)));
   renderCal();
   renderTabs();
+  if(view==="stats")renderStats();
 }
 
 /* ---------- drag (mouse + touch) ---------- */
