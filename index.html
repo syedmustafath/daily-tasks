@@ -434,8 +434,10 @@ function render(){
   renderDate();
   renderPomo();
   list.innerHTML="";
+  const open=t.filter(k=>k.start==null); // scheduled tasks live on the calendar, but still count toward the 15
   if(!t.length) list.innerHTML='<div class="empty">No tasks yet. Pick today\'s 15.</div>';
-  t.forEach(k=>list.append(card(k)));
+  else if(!open.length) list.innerHTML='<div class="empty">Everything is scheduled on the calendar.</div>';
+  open.forEach(k=>list.append(card(k)));
   renderCal();
 }
 
