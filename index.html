@@ -127,6 +127,9 @@ select.pri[data-p="3"]{color:var(--p3f);background:var(--p3b)}
 .line.hour{border-top-color:var(--mute);opacity:.55}
 .line span{position:absolute;left:12px;top:2px;font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 #track{position:absolute;left:58px;right:8px;top:0;bottom:0}
+.nowl{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--warn);z-index:6;pointer-events:none}
+.nowl:after{content:"";position:absolute;left:52px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--warn)}
+.nowl span{position:absolute;left:4px;top:-9px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;line-height:1;padding:3px 5px;border-radius:5px;font-variant-numeric:tabular-nums}
 .blk{position:absolute;border-radius:6px;padding:0 4px;display:flex;align-items:center;gap:4px;font-size:13px;overflow:hidden;cursor:pointer;border-left:4px solid;line-height:1.15}
 .blk.t{background:var(--accbg);border-color:var(--acc)}
 .blk.e{background:var(--evbg);border-color:var(--ev)}
@@ -390,8 +393,31 @@ function renderCal(){
     b.append(g,tx,sm); b.onclick=()=>openEditor(k,o.kind,false);
     tr.append(b);
   });
+  placeNow();
 }
 
+/* ---------- "now" marker + auto-scroll ---------- */
+const isMobile=()=>matchMedia("(max-width:760px)").matches;
+function nowMin(){const d=new Date();return d.getHours()*60+d.getMinutes()-660+d.getSeconds()/60}
+function placeNow(){
+  const cal=$("cal"); if(!cal)return;
+  let el=$("nowl"); const m=nowMin();
+  if(state.cur!==keyOf(new Date())||m<0||m>TOTAL){if(el)el.remove();return}
+  if(!el){el=document.createElement("div");el.id="nowl";el.className="nowl";el.innerHTML="<span></span>";cal.append(el)}
+  el.style.top=(m*PPM)+"px";
+  const d=new Date(); el.firstChild.textContent=pad(d.getHours())+":"+pad(d.getMinutes());
+}
+function scrollToNow(){
+  if(!isMobile()||view!=="plan"||tab!=="cal")return;
+  requestAnimationFrame(()=>{
+    placeNow();
+    const el=$("nowl"), target=el||$("cal");
+    const y=target.getBoundingClientRect().top+scrollY-(el?innerHeight*0.35:70);
+    scrollTo({top:Math.max(0,y),behavior:"smooth"});
+  });
+}
+setInterval(placeNow,20000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){placeNow();scrollToNow()}});
 function renderPomo(){
   const box=$("pomo"); box.innerHTML="";
   ["Before lunch","After lunch"].forEach((name,gi)=>{
@@ -580,7 +606,8 @@ $("statsbtn").onclick=()=>setView(view==="stats"?"plan":"stats");
 let tab="tasks"; try{tab=localStorage.getItem("velocity.tab")==="cal"?"cal":"tasks"}catch(e){}
 function setTab(t){
   tab=t; try{localStorage.setItem("velocity.tab",t)}catch(e){}
-  renderTabs(); window.scrollTo({top:0});
+  renderTabs();
+  if(t==="cal")scrollToNow(); else window.scrollTo({top:0});
 }
 function renderTabs(){
   const open=state.tasks.filter(k=>k.start==null).length, sch=state.tasks.length-open+state.events.length;
@@ -815,6 +842,7 @@ function load(raw){
 }
 try{const r=localStorage.getItem(KEY)||localStorage.getItem("today15.v3")||localStorage.getItem("today15.v2")||localStorage.getItem("today15.v1"); if(r)load(r)}catch(e){}
 render();
+scrollToNow();
 sbLoad();
 if("serviceWorker"in navigator&&location.protocol!=="file:")addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 </script>
