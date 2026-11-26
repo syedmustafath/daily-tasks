@@ -64,6 +64,8 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .task:hover{border-color:#bfdbfe}
 .task.done .txt{text-decoration:line-through;color:var(--mute)}
 .task.dragging{opacity:.35}
+.task.ins-l{box-shadow:-5px 0 0 var(--acc)}.task.ins-r{box-shadow:5px 0 0 var(--acc)}
+.task.ins-t{box-shadow:0 -5px 0 var(--acc)}.task.ins-b{box-shadow:0 5px 0 var(--acc)}
 .grip{cursor:grab;touch-action:none;user-select:none;color:var(--mute);padding:2px 4px;font-size:18px;line-height:1;letter-spacing:-2px}
 .task input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc);margin-top:3px;flex:none}
 .body{flex:1;min-width:0}
@@ -191,7 +193,14 @@ const snap=()=>({days:clone(state.days),cur:state.cur});
 function serialize(){
   const days={};
   for(const [k,v] of Object.entries(state.days)) if(v.tasks.length||v.events.length||v.pomo.some(Boolean)) days[k]=v;
-  return {v:4,days,cur:state.cur,ptimer:state.ptimer,undo:state.undo};
+  return {v:5,days,cur:state.cur,ptimer:state.ptimer,undo:state.undo};
+}
+const pv=k=>k.p==null?9:k.p;
+// Put a task after the last task of equal-or-higher priority (used for new tasks / priority changes).
+function placeByPriority(arr,k){
+  const i=arr.indexOf(k); if(i>=0)arr.splice(i,1);
+  let at=0; arr.forEach((z,j)=>{if(pv(z)<=pv(k))at=j+1});
+  arr.splice(at,0,k);
 }
 function fmt(min){const m=660+min;return pad(Math.floor(m/60))+":"+pad(m%60)}
 function rng(a){return fmt(a.start)+"–"+fmt(a.start+a.dur)}
@@ -242,7 +251,7 @@ function card(k,cls){
   const pr=document.createElement("select"); pr.className="pri"; pr.title="Priority";
   pr.innerHTML='<option value="">Priority</option><option value="0">P0</option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option>';
   pr.value=k.p==null?"":String(k.p); pr.dataset.p=pr.value;
-  pr.onchange=()=>{k.p=pr.value===""?null:+pr.value;save();render()};
+  pr.onchange=()=>{k.p=pr.value===""?null:+pr.value;placeByPriority(state.tasks,k);save();render()};
   b.append(pr);
   if(k.rep){const rp=document.createElement("span"); rp.className="carry rep"; rp.textContent="↻ repeats daily"; b.append(rp)}
   if(k.c>0){const cr=document.createElement("span"); cr.className="carry"; cr.textContent="↪ carried "+(k.c>1?"×"+k.c:"over"); b.append(cr)}
@@ -395,12 +404,12 @@ function completeDay(){
       k.start=s;
     }
     k.c=(k.c||0)+1;
-    nd.tasks.push(k);
+    nd.tasks.push(k); placeByPriority(nd.tasks,k);
   });
   reps.forEach(k=>{
     const s=k.start!=null?fit(k.dur,k.start):null;
     if(s!=null)busy.push({s,e:s+k.dur});
-    nd.tasks.push({id:uid(),text:k.text,done:false,start:s,dur:k.dur,p:k.p,c:0,rep:true});
+    {const nt={id:uid(),text:k.text,done:false,start:s,dur:k.dur,p:k.p,c:0,rep:true};nd.tasks.push(nt);placeByPriority(nd.tasks,nt)}
   });
   const ids=new Set(mv.map(k=>k.id));
   d.tasks=d.tasks.filter(k=>!ids.has(k.id));
@@ -426,7 +435,7 @@ function render(){
   renderPomo();
   list.innerHTML="";
   if(!t.length) list.innerHTML='<div class="empty">No tasks yet. Pick today\'s 15.</div>';
-  t.map((k,i)=>({k,i})).sort((a,b)=>(a.k.p==null?9:a.k.p)-(b.k.p==null?9:b.k.p)||a.i-b.i).forEach(o=>list.append(card(o.k)));
+  t.forEach(k=>list.append(card(k)));
   renderCal();
 }
 
@@ -447,9 +456,19 @@ function startDrag(e,k,kind,srcEl){
     let m=Math.round((y-tr.top)/PPM/15)*15;
     return Math.max(0,Math.min(TOTAL-dur,m));
   }
-  function indicate(w,y){
+  function listPos(x,y){
+    const cards=[...$("list").querySelectorAll(".task")].filter(c=>c.dataset.id!==k.id);
+    if(!cards.length)return null;
+    let best=null,bd=1e9;
+    cards.forEach(c=>{const r=c.getBoundingClientRect(),d=Math.hypot(x-(r.left+r.width/2),y-(r.top+r.height/2));if(d<bd){bd=d;best=c}});
+    const r=best.getBoundingClientRect(), single=cards.every(c=>c.offsetLeft===cards[0].offsetLeft);
+    return {id:best.dataset.id,el:best,before:single?y<r.top+r.height/2:x<r.left+r.width/2,single};
+  }
+  function indicate(w,y,x){
     const dp=$("drop"), ls=$("list");
     ls.classList.toggle("over",!!w&&w.type==="list");
+    ls.querySelectorAll(".task").forEach(c=>c.classList.remove("ins-l","ins-r","ins-t","ins-b"));
+    if(w&&w.type==="list"&&kind==="task"){const p=listPos(x,y);if(p)p.el.classList.add(p.single?(p.before?"ins-t":"ins-b"):(p.before?"ins-l":"ins-r"))}
     if(w&&w.type==="cal"){const s=startAt(y);dp.style.display="block";dp.style.top=(s*PPM)+"px";dp.style.height=(dur*PPM)+"px"}
     else dp.style.display="none";
   }
@@ -460,16 +479,21 @@ function startDrag(e,k,kind,srcEl){
       document.body.append(ghost); srcEl.classList.add("dragging");
     }
     ghost.style.left=(ev.clientX-20)+"px"; ghost.style.top=(ev.clientY-20)+"px";
-    indicate(where(ev.clientX,ev.clientY),ev.clientY);
+    indicate(where(ev.clientX,ev.clientY),ev.clientY,ev.clientX);
     if(ev.clientY<60)window.scrollBy(0,-12); else if(ev.clientY>innerHeight-60)window.scrollBy(0,12);
   }
   function up(ev){
     grip.removeEventListener("pointermove",move); grip.removeEventListener("pointerup",up); grip.removeEventListener("pointercancel",up);
     if(!ghost)return;
     const w=where(ev.clientX,ev.clientY), s=w&&w.type==="cal"?startAt(ev.clientY):null;
+    const lp=w&&w.type==="list"&&kind==="task"?listPos(ev.clientX,ev.clientY):null;
     ghost.remove(); srcEl.classList.remove("dragging"); $("list").classList.remove("over");
     if(!w){render();return}
-    if(w.type==="list"){k.start=null}
+    if(w.type==="list"){
+      k.start=null;
+      if(lp){const a=state.tasks, from=a.indexOf(k); if(from>=0)a.splice(from,1);
+        let at=a.findIndex(z=>z.id===lp.id); at=at<0?a.length:at+(lp.before?0:1); a.splice(at,0,k)}
+    }
     else{k.start=s;k.dur=dur}
     save(); render();
   }
@@ -536,8 +560,8 @@ $("f").onsubmit=e=>{
   e.preventDefault();
   const v=$("t").value.trim();
   if(!v||state.tasks.length>=MAX)return;
-  const pv=$("np").value;
-  state.tasks.push({id:uid(),text:v,done:false,start:null,dur:DEF,p:pv===""?null:+pv});
+  const pvl=$("np").value;
+  {const nt={id:uid(),text:v,done:false,start:null,dur:DEF,p:pvl===""?null:+pvl};state.tasks.push(nt);placeByPriority(state.tasks,nt)}
   $("t").value=""; msg(""); save(); render(); $("t").focus();
 };
 $("refresh").onclick=()=>{
@@ -586,6 +610,10 @@ function load(raw){
       cur=keyOf(new Date());
       days={[cur]:{tasks:normT(s.tasks),events:normE(s.events),pomo:normP(s.pomo)}};
     }else return;
+    if(!(s.v>=5)){ // v<5 displayed tasks sorted by priority; bake that order in once
+      const srt=o=>Object.values(o).forEach(d=>{d.tasks=d.tasks.map((k,i)=>({k,i})).sort((a,b)=>pv(a.k)-pv(b.k)||a.i-b.i).map(o=>o.k)});
+      srt(days); if(undo)srt(undo.days);
+    }
     state.days=days; state.cur=cur; state.undo=undo;
     state.ptimer=s.ptimer&&Number.isFinite(s.ptimer.end)?{end:s.ptimer.end}:null;
   }catch(e){}
